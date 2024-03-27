@@ -1,40 +1,67 @@
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-from .models import User, Contact
-from .schemas import UserCreate, ContactCreate
 from datetime import datetime, timedelta
+from .models import Contact, User
+from .schemas import ContactCreate
+from passlib.context import CryptContext
+from jose import jwt, JWTError
+from typing import Optional
+
+SECRET_KEY = "your-secret-key"
+ALGORITHM = "HS256"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def get_user_by_email(db_session: Session, email: str):
-    return db_session.query(User).filter(User.email == email).first()
-
-def verify_password(plain_password: str, hashed_password: str):
+# Funkcja do weryfikacji hasła
+def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
-def create_user(db_session: Session, user: UserCreate):
-    hashed_password = pwd_context.hash(user.password)
-    db_user = User(email=user.email, password_hash=hashed_password)
-    db_session.add(db_user)
-    db_session.commit()
-    db_session.refresh(db_user)
-    return db_user
+# Funkcja do generowania hasha hasła
+def get_password_hash(password):
+    return pwd_context.hash(password)
 
-def get_user(db_session: Session, user_id: int):
-    return db_session.query(User).filter(User.id == user_id).first()
+# Funkcja do autentykacji użytkownika
+def authenticate_user(email: str, password: str, db: Session):
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not verify_password(password, user.hashed_password):
+        return None
+    return user
+
+# Funkcja do autentykacji użytkownika na podstawie tokenu
+def authenticate_user(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            return None
+    except JWTError:
+        return None
+
+    return User(email=email)
+
+# Funkcja do tworzenia tokena dostępu
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
 
 def get_contact(db_session: Session, contact_id: int):
     return db_session.query(Contact).filter(Contact.id == contact_id).first()
-def get_contacts(db_session: Session, user_id: int, search_query: str = None):
-    query = db_session.query(Contact).filter(Contact.user_id == user_id)
+
+def get_contacts(db_session: Session, search_query: str = None):
     if search_query:
-        query = query.filter(or_(
+        return db_session.query(Contact).filter(or_(
             Contact.first_name.ilike(f"%{search_query}%"),
             Contact.last_name.ilike(f"%{search_query}%"),
             Contact.email.ilike(f"%{search_query}%")
-        ))
-    return query.all()
+        )).all()
+    else:
+        return db_session
 
 def create_contact(db_session: Session, contact: ContactCreate):
     db_contact = Contact(**contact.dict())

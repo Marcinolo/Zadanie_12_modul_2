@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 
+# Model do przesyłania danych kontaktu przy tworzeniu
 class ContactCreate(BaseModel):
     first_name: str
     last_name: str
@@ -12,19 +13,7 @@ class ContactCreate(BaseModel):
 class ContactOut(ContactCreate):
     id: int
 
-class UserBase(BaseModel):
-    email: str
-
-class UserCreate(UserBase):
-    password: str
-
-class UserOut(UserBase):
-    id: int
-
+# Model tokena
 class Token(BaseModel):
     access_token: str
-    refresh_token: str
     token_type: str
-
-class TokenData(BaseModel):
-    email: str
